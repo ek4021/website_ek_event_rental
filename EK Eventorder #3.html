@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EK Event Equipment Rental - Owner Dashboard</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- SheetJS CDN for Excel Export/Import -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <!-- Alpine.js for Lightweight Reactive State Management -->
+  <script defer src="https://unpkg.com/alpinejs@3.13.5/dist/cdn.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#eff6ff',
+              100: '#dbeafe',
+              500: '#3b82f6',
+              600: '#2563eb',
+              700: '#1d4ed8',
+              900: '#1e3a8a',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+    }
+    @media print {
+      body {
+        background: #ffffff !important;
+        color: #000000 !important;
+      }
+      /* Sembunyikan elemen dashboard utama & tombol navigasi saat cetak */
+      header, main, .no-print {
+        display: none !important;
+      }
+      /* Tampilkan nota secara penuh di halaman cetak */
+      #print-invoice-modal-wrapper {
+        position: absolute !important;
+        left: 0 !important;
+        top: 0 !important;
+        width: 100% !important;
+        height: auto !important;
+        background: #ffffff !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        display: block !important;
+        overflow: visible !important;
+      }
+      #print-invoice-modal {
+        box-shadow: none !important;
+        border: none !important;
+        max-width: 100% !important;
+        width: 100% !important;
+        padding: 24px !important;
+        margin: 0 !important;
+        border-radius: 0 !important;
+      }
+    }
+  </style>
+</head>
+
+<body class="bg-slate-50 text-slate-800 min-h-screen flex flex-col antialiased" x-data="rentalApp()">
+
+  <!-- HEADER NAVBAR -->
+  <header class="bg-slate-900 text-white sticky top-0 z-30 shadow-md print:hidden">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div>
+          <h1 class="font-extrabold text-lg tracking-tight leading-none text-white">EK Event Equipment Rental</h1>
+          <p class="text-xs text-slate-400 mt-0.5">Owner Event Management System</p>
+        </div>
+      </div>
+      <div class="flex items-center space-x-2 sm:space-x-3">
+        <button @click="openModal()" class="bg-blue-600 hover:bg-blue-700 text-white text-xs sm:text-sm font-semibold px-3 sm:px-4 py-2 rounded-lg flex items-center shadow-lg shadow-blue-500/20 transition-all active:scale-95">
+          <i data-lucide="plus-circle" class="w-4 h-4 mr-1.5"></i>
+          <span>Buat Pesanan</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CONTAINER -->
+  <main class="flex-grow max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6 print:hidden">
+
+    <!-- DASHBOARD SUMMARY CARDS WITH DISTINCT STATUS COLORS -->
+    <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+      
+      <!-- Card: Total Pendapatan -->
+      <div class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-shadow">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-slate-500 uppercase tracking-wider">Total Pendapatan</span>
+          <div class="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
+            <i data-lucide="wallet" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="text-xl font-extrabold text-slate-900" x-text="formatRupiah(totalRevenue)"></div>
+        <div class="text-[11px] text-slate-400 mt-1" x-text="`${orders.length} total transaksi`"></div>
+      </div>
+
+      <!-- Card Status: Menunggu Konfirmasi (Amber) -->
+      <div @click="filterStatus = 'Menunggu'" class="cursor-pointer bg-amber-50/70 hover:bg-amber-100/60 p-5 rounded-2xl border border-amber-200 shadow-sm transition-all" :class="{'ring-2 ring-amber-500': filterStatus === 'Menunggu'}">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-amber-800 uppercase tracking-wider">Menunggu</span>
+          <div class="w-8 h-8 rounded-lg bg-amber-500 text-white flex items-center justify-center font-bold">
+            <i data-lucide="clock" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-amber-900" x-text="countByStatus('Menunggu')">0</div>
+        <div class="text-[11px] font-medium text-amber-700/80 mt-1">Pending Payment / DP</div>
+      </div>
+
+      <!-- Card Status: Disewa / Aktif (Blue) -->
+      <div @click="filterStatus = 'Disewa'" class="cursor-pointer bg-blue-50/70 hover:bg-blue-100/60 p-5 rounded-2xl border border-blue-200 shadow-sm transition-all" :class="{'ring-2 ring-blue-500': filterStatus === 'Disewa'}">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-blue-800 uppercase tracking-wider">Sedang Disewa</span>
+          <div class="w-8 h-8 rounded-lg bg-blue-600 text-white flex items-center justify-center">
+            <i data-lucide="truck" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-blue-900" x-text="countByStatus('Disewa')">0</div>
+        <div class="text-[11px] font-medium text-blue-700/80 mt-1">Alat Di Lapangan / Event</div>
+      </div>
+
+      <!-- Card Status: Selesai (Emerald) -->
+      <div @click="filterStatus = 'Selesai'" class="cursor-pointer bg-emerald-50/70 hover:bg-emerald-100/60 p-5 rounded-2xl border border-emerald-200 shadow-sm transition-all" :class="{'ring-2 ring-emerald-500': filterStatus === 'Selesai'}">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-emerald-800 uppercase tracking-wider">Selesai</span>
+          <div class="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center">
+            <i data-lucide="check-circle-2" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-emerald-900" x-text="countByStatus('Selesai')">0</div>
+        <div class="text-[11px] font-medium text-emerald-700/80 mt-1">Kembali & Lunas</div>
+      </div>
+
+      <!-- Card Status: Dibatalkan (Rose) -->
+      <div @click="filterStatus = 'Dibatalkan'" class="cursor-pointer bg-rose-50/70 hover:bg-rose-100/60 p-5 rounded-2xl border border-rose-200 shadow-sm transition-all" :class="{'ring-2 ring-rose-500': filterStatus === 'Dibatalkan'}">
+        <div class="flex items-center justify-between mb-2">
+          <span class="text-xs font-bold text-rose-800 uppercase tracking-wider">Dibatalkan</span>
+          <div class="w-8 h-8 rounded-lg bg-rose-600 text-white flex items-center justify-center">
+            <i data-lucide="x-circle" class="w-4 h-4"></i>
+          </div>
+        </div>
+        <div class="text-2xl font-black text-rose-900" x-text="countByStatus('Dibatalkan')">0</div>
+        <div class="text-[11px] font-medium text-rose-700/80 mt-1">Batal / Cancelled</div>
+      </div>
+
+    </section>
+
+    <!-- TOOLBAR & FILTERS -->
+    <section class="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-4">
+      
+      <!-- Filter Tabs -->
+      <div class="flex items-center space-x-1 overflow-x-auto pb-1 md:pb-0 scrollbar-none">
+        <button @click="filterStatus = 'Semua'" 
+          :class="filterStatus === 'Semua' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors">
+          Semua Pesanan (<span x-text="orders.length"></span>)
+        </button>
+        <button @click="filterStatus = 'Menunggu'" 
+          :class="filterStatus === 'Menunggu' ? 'bg-amber-500 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors">
+          Menunggu (<span x-text="countByStatus('Menunggu')"></span>)
+        </button>
+        <button @click="filterStatus = 'Disewa'" 
+          :class="filterStatus === 'Disewa' ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors">
+          Disewa (<span x-text="countByStatus('Disewa')"></span>)
+        </button>
+        <button @click="filterStatus = 'Selesai'" 
+          :class="filterStatus === 'Selesai' ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors">
+          Selesai (<span x-text="countByStatus('Selesai')"></span>)
+        </button>
+        <button @click="filterStatus = 'Dibatalkan'" 
+          :class="filterStatus === 'Dibatalkan' ? 'bg-rose-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'"
+          class="px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-colors">
+          Dibatalkan (<span x-text="countByStatus('Dibatalkan')"></span>)
+        </button>
+      </div>
+
+      <!-- Action Buttons & Search -->
+      <div class="flex items-center space-x-2">
+        <div class="relative flex-1 md:w-64">
+          <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+          <input type="text" x-model="searchQuery" placeholder="Cari pemesan atau barang..." 
+            class="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all">
+        </div>
+
+        <!-- Import Excel -->
+        <label class="bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold px-3 py-1.5 rounded-xl cursor-pointer flex items-center transition-colors">
+          <i data-lucide="upload" class="w-3.5 h-3.5 mr-1.5"></i>
+          <span>Import</span>
+          <input type="file" @change="importExcel($event)" accept=".xlsx, .xls, .csv" class="hidden">
+        </label>
+
+        <!-- Export Excel -->
+        <button @click="exportExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold px-3 py-1.5 rounded-xl flex items-center transition-colors shadow-sm">
+          <i data-lucide="download" class="w-3.5 h-3.5 mr-1.5"></i>
+          <span>Export Excel</span>
+        </button>
+      </div>
+
+    </section>
+
+    <!-- ORDERS TABLE -->
+    <section class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="overflow-x-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="bg-slate-50 border-b border-slate-200 text-slate-500 text-[11px] font-extrabold uppercase tracking-wider">
+              <th class="py-3.5 px-4">ID & Pemesan</th>
+              <th class="py-3.5 px-4">Tanggal & Durasi</th>
+              <th class="py-3.5 px-4">Barang & Qty</th>
+              <th class="py-3.5 px-4 text-right">Harga / Unit</th>
+              <th class="py-3.5 px-4 text-right">Total Bayar</th>
+              <th class="py-3.5 px-4 text-center">Status</th>
+              <th class="py-3.5 px-4 text-center">Aksi</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 text-xs">
+            <template x-for="order in filteredOrders" :key="order.id">
+              <tr class="hover:bg-slate-50/80 transition-colors">
+                <!-- ID & Pemesan -->
+                <td class="py-3.5 px-4 align-top">
+                  <div class="font-bold text-slate-900 text-sm" x-text="order.customerName"></div>
+                  <div class="text-[11px] text-slate-400 font-mono" x-text="`#${order.id}`"></div>
+                  <div class="text-[11px] text-slate-500 mt-0.5" x-show="order.phone" x-text="order.phone"></div>
+                </td>
+
+                <!-- Tanggal & Durasi -->
+                <td class="py-3.5 px-4 align-top">
+                  <div class="font-medium text-slate-800" x-text="formatDate(order.date)"></div>
+                  <div class="inline-block mt-1 px-2 py-0.5 bg-slate-100 text-slate-600 rounded-md font-semibold text-[11px]">
+                    <span x-text="order.durationDays"></span> Hari Sewa
+                  </div>
+                </td>
+
+                <!-- Barang & Qty -->
+                <td class="py-3.5 px-4 align-top">
+                  <div class="space-y-1">
+                    <template x-for="(item, idx) in order.items" :key="idx">
+                      <div class="flex justify-between text-slate-700 bg-slate-50 px-2 py-1 rounded border border-slate-100">
+                        <span class="font-medium" x-text="item.name"></span>
+                        <span class="font-bold text-slate-900 ml-2" x-text="`${item.qty} unit`"></span>
+                      </div>
+                    </template>
+                  </div>
+                  <div class="mt-1 text-[11px] text-slate-400">
+                    Total: <strong class="text-slate-700" x-text="calculateTotalItemsCount(order)"></strong> barang
+                  </div>
+                </td>
+
+                <!-- Harga Per Item -->
+                <td class="py-3.5 px-4 align-top text-right">
+                  <div class="space-y-1 font-mono text-slate-600">
+                    <template x-for="(item, idx) in order.items" :key="idx">
+                      <div class="py-1" x-text="`${formatRupiah(item.pricePerUnit)} /hr`"></div>
+                    </template>
+                  </div>
+                </td>
+
+                <!-- Total Harga Bayar -->
+                <td class="py-3.5 px-4 align-top text-right">
+                  <div class="font-black text-slate-900 text-sm font-mono" x-text="formatRupiah(order.totalAmount)"></div>
+                  <div class="text-[10px] text-slate-400 mt-0.5" x-text="`(${order.durationDays} hr × total item)`"></div>
+                </td>
+
+                <!-- Status Badge -->
+                <td class="py-3.5 px-4 align-top text-center">
+                  <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-bold tracking-wide"
+                    :class="{
+                      'bg-amber-100 text-amber-800 border border-amber-300': order.status === 'Menunggu',
+                      'bg-blue-100 text-blue-800 border border-blue-300': order.status === 'Disewa',
+                      'bg-emerald-100 text-emerald-800 border border-emerald-300': order.status === 'Selesai',
+                      'bg-rose-100 text-rose-800 border border-rose-300': order.status === 'Dibatalkan'
+                    }">
+                    <span class="w-1.5 h-1.5 rounded-full mr-1.5"
+                      :class="{
+                        'bg-amber-500': order.status === 'Menunggu',
+                        'bg-blue-500': order.status === 'Disewa',
+                        'bg-emerald-500': order.status === 'Selesai',
+                        'bg-rose-500': order.status === 'Dibatalkan'
+                      }"></span>
+                    <span x-text="order.status"></span>
+                  </span>
+                </td>
+
+                <!-- Actions -->
+                <td class="py-3.5 px-4 align-top text-center">
+                  <div class="flex items-center justify-center space-x-1">
+                    <!-- Print Invoice -->
+                    <button @click="viewInvoice(order)" title="Cetak Nota" class="p-1.5 text-slate-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors">
+                      <i data-lucide="printer" class="w-4 h-4"></i>
+                    </button>
+                    <!-- Edit -->
+                    <button @click="editOrder(order)" title="Edit Pesanan" class="p-1.5 text-slate-600 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-colors">
+                      <i data-lucide="edit-3" class="w-4 h-4"></i>
+                    </button>
+                    <!-- Delete -->
+                    <button @click="confirmDelete(order)" title="Hapus Pesanan" class="p-1.5 text-slate-600 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            </template>
+            <template x-if="filteredOrders.length === 0">
+              <tr>
+                <td colspan="7" class="py-12 text-center text-slate-400">
+                  <i data-lucide="inbox" class="w-10 h-10 mx-auto mb-2 opacity-50"></i>
+                  <p class="font-medium text-sm">Tidak ada data pesanan ditemukan.</p>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- MODAL INPUT / EDIT PESANAN -->
+  <div x-show="isModalOpen" 
+       x-transition.opacity
+       class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    
+    <div @click.outside="closeModal()" class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto border border-slate-100">
+      
+      <!-- Modal Header -->
+      <div class="px-6 py-4 bg-slate-900 text-white flex items-center justify-between sticky top-0 z-10">
+        <div>
+          <h3 class="font-extrabold text-base" x-text="isEditMode ? 'Edit Pesanan Rental' : 'Buat Pesanan Baru'"></h3>
+          <p class="text-xs text-slate-400">Isi rincian sewa peralatan event</p>
+        </div>
+        <button @click="closeModal()" class="text-slate-400 hover:text-white p-1 rounded-lg">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Form Content -->
+      <form @submit.prevent="saveOrder()" class="p-6 space-y-5">
+        
+        <!-- Informasi Pemesan -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Nama Pemesan *</label>
+            <input type="text" x-model="formData.customerName" required placeholder="Contoh: Budi Santoso (EO Creative)" 
+              class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">No. HP / WhatsApp</label>
+            <input type="text" x-model="formData.phone" placeholder="Contoh: 081234567890" 
+              class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Tanggal Pesan *</label>
+            <input type="date" x-model="formData.date" required 
+              class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Berapa Hari Sewa *</label>
+            <input type="number" min="1" x-model.number="formData.durationDays" required 
+              class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none">
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Status Pesanan</label>
+            <select x-model="formData.status" 
+              class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold">
+              <option value="Menunggu">🟡 Menunggu (Pending)</option>
+              <option value="Disewa">🔵 Disewa (Aktif)</option>
+              <option value="Selesai">🟢 Selesai (Lunas)</option>
+              <option value="Dibatalkan">🔴 Dibatalkan</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Dynamic Items Rental Form -->
+        <div class="border-t border-slate-200 pt-4">
+          <div class="flex items-center justify-between mb-3">
+            <h4 class="font-bold text-slate-800 text-xs uppercase tracking-wider">Daftar Barang yang Disewa</h4>
+            <button type="button" @click="addItemRow()" class="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center">
+              <i data-lucide="plus" class="w-3.5 h-3.5 mr-1"></i> Tambah Barang
+            </button>
+          </div>
+
+          <div class="space-y-3">
+            <template x-for="(item, index) in formData.items" :key="index">
+              <div class="p-3 bg-slate-50 rounded-2xl border border-slate-200/80 space-y-2">
+                <div class="grid grid-cols-1 sm:grid-cols-12 gap-2 items-center">
+                  
+                  <!-- Nama Barang -->
+                  <div class="sm:col-span-5">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Nama Barang</label>
+                    <input type="text" x-model="item.name" required list="preset-items" placeholder="Misal: Sound System 1000W" 
+                      class="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500">
+                  </div>
+
+                  <!-- Jumlah / Qty -->
+                  <div class="sm:col-span-3">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Jumlah (Qty)</label>
+                    <input type="number" min="1" x-model.number="item.qty" required 
+                      class="w-full text-xs p-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500">
+                  </div>
+
+                  <!-- Harga Per Item (Rupiah Input) -->
+                  <div class="sm:col-span-3">
+                    <label class="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Harga / Item / Hari</label>
+                    <div class="relative">
+                      <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-slate-400">Rp</span>
+                      <input type="number" min="0" x-model.number="item.pricePerUnit" required placeholder="0" 
+                        class="w-full text-xs pl-8 pr-2 py-2 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 font-mono">
+                    </div>
+                  </div>
+
+                  <!-- Hapus Row -->
+                  <div class="sm:col-span-1 flex justify-end pt-3 sm:pt-0">
+                    <button type="button" @click="removeItemRow(index)" x-show="formData.items.length > 1" class="text-slate-400 hover:text-rose-600 p-1">
+                      <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Preview Format Rupiah Live -->
+                <div class="flex justify-between text-[11px] text-slate-500 px-1 pt-1 border-t border-slate-200/50">
+                  <span>Subtotal Per Hari: <strong class="text-slate-800 font-mono" x-text="formatRupiah((item.qty || 0) * (item.pricePerUnit || 0))"></strong></span>
+                  <span>Input Rupiah: <span class="font-mono text-blue-600 font-bold" x-text="formatRupiah(item.pricePerUnit || 0)"></span></span>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Preset Item Datalist -->
+          <datalist id="preset-items">
+            <option value="Sound System 1000W"></option>
+            <option value="Tenda Sarnafil 3x3m"></option>
+            <option value="Kursi Futura + Cover"></option>
+            <option value="Meja VIP Round"></option>
+            <option value="Lighting Moving Head Beam"></option>
+            <option value="Panggung Rigging 4x6m"></option>
+            <option value="Microphone Wireless Shure"></option>
+            <option value="LED Screen Video Wall P3.9"></option>
+            <option value="Genset Silent 20 KVA"></option>
+          </datalist>
+        </div>
+
+        <!-- Total Calculation Summary Banner -->
+        <div class="bg-blue-50 border border-blue-200 p-4 rounded-2xl space-y-1.5">
+          <div class="flex justify-between text-xs text-blue-900">
+            <span>Total Semua Barang (Qty):</span>
+            <span class="font-bold" x-text="`${calculateModalTotalItems()} Unit`"></span>
+          </div>
+          <div class="flex justify-between text-xs text-blue-900">
+            <span>Harga Per Hari (All Items):</span>
+            <span class="font-mono font-semibold" x-text="formatRupiah(calculateModalDailySubtotal())"></span>
+          </div>
+          <div class="flex justify-between text-sm font-black text-blue-950 pt-1 border-t border-blue-200">
+            <span>Total Harga Harus Dibayar (<span x-text="formData.durationDays"></span> Hari):</span>
+            <span class="font-mono text-base text-blue-700" x-text="formatRupiah(calculateModalGrandTotal())"></span>
+          </div>
+        </div>
+
+        <!-- Catatan / Lokasi -->
+        <div>
+          <label class="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Catatan / Lokasi Event</label>
+          <textarea x-model="formData.notes" rows="2" placeholder="Detail venue event atau instruksi pengiriman..." 
+            class="w-full text-xs p-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:ring-2 focus:ring-blue-500 focus:outline-none"></textarea>
+        </div>
+
+        <!-- Form Submit Buttons -->
+        <div class="flex justify-end space-x-3 pt-2">
+          <button type="button" @click="closeModal()" class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">
+            Batal
+          </button>
+          <button type="submit" class="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md shadow-blue-500/20">
+            Simpan Pesanan
+          </button>
+        </div>
+
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL CETAK NOTA / INVOICE -->
+  <div x-show="selectedInvoice" 
+       x-transition.opacity
+       id="print-invoice-modal-wrapper"
+       class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+    
+    <div x-show="selectedInvoice" @click.outside="selectedInvoice = null" 
+         id="print-invoice-modal"
+         class="bg-white rounded-3xl shadow-2xl max-w-xl w-full p-6 space-y-6 border border-slate-100">
+      
+      <!-- Invoice Header -->
+      <div class="flex justify-between items-start border-b border-slate-200 pb-4">
+        <div>
+          <div class="text-base font-black text-slate-900 tracking-tight">EK EVENT EQUIPMENT RENTAL</div>
+          <div class="text-xs font-semibold text-slate-600">Stagehand & Event Equipment</div>
+          <div class="text-[11px] text-slate-500 mt-1 font-medium">Jl. Wates Km 10 Pedes Sedayu Yogyakarta</div>
+        </div>
+        <div class="text-right">
+          <div class="inline-block px-3 py-1 bg-slate-900 text-white font-mono font-bold text-xs rounded-lg">NOTA SEWA</div>
+          <div class="text-xs font-mono font-bold text-slate-700 mt-1" x-text="`#${selectedInvoice?.id}`"></div>
+          <div class="text-[11px] text-slate-500" x-text="formatDate(selectedInvoice?.date)"></div>
+        </div>
+      </div>
+
+      <!-- Customer Detail & Event Location/Notes -->
+      <div class="bg-slate-50 p-3.5 rounded-2xl text-xs space-y-2 border border-slate-200/80">
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div>
+            <div class="text-[10px] font-bold uppercase text-slate-400">Penyewa / Pemesan:</div>
+            <div class="font-bold text-slate-900 text-sm" x-text="selectedInvoice?.customerName"></div>
+            <div class="text-slate-600 font-medium mt-0.5" x-text="selectedInvoice?.phone || 'Tanpa No. Telepon'"></div>
+          </div>
+          <div>
+            <div class="text-[10px] font-bold uppercase text-slate-400">Durasi & Waktu Sewa:</div>
+            <div class="font-bold text-slate-900 text-xs" x-text="`${selectedInvoice?.durationDays} Hari Sewa`"></div>
+            <div class="text-slate-500 text-[11px] mt-0.5" x-text="`Tanggal: ${formatDate(selectedInvoice?.date)}`"></div>
+          </div>
+        </div>
+
+        <!-- Catatan / Lokasi Event -->
+        <div class="pt-2 border-t border-slate-200/80">
+          <div class="text-[10px] font-bold uppercase text-slate-400 mb-0.5">Catatan / Lokasi Event:</div>
+          <div class="text-slate-800 font-semibold bg-white p-2 rounded-xl border border-slate-200 text-xs min-h-[32px]" x-text="selectedInvoice?.notes || 'Tidak ada catatan khusus'"></div>
+        </div>
+      </div>
+
+      <!-- Items Table -->
+      <div>
+        <table class="w-full text-left text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 text-[10px] font-extrabold uppercase text-slate-400">
+              <th class="py-2">Item Barang</th>
+              <th class="py-2 text-center">Qty</th>
+              <th class="py-2 text-right">Harga / Unit</th>
+              <th class="py-2 text-right">Subtotal / Hr</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100 font-mono">
+            <template x-for="item in selectedInvoice?.items" :key="item.name">
+              <tr>
+                <td class="py-2 font-sans font-medium text-slate-800" x-text="item.name"></td>
+                <td class="py-2 text-center text-slate-700" x-text="item.qty"></td>
+                <td class="py-2 text-right text-slate-600" x-text="formatRupiah(item.pricePerUnit)"></td>
+                <td class="py-2 text-right font-bold text-slate-900" x-text="formatRupiah(item.qty * item.pricePerUnit)"></td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Total Calculation -->
+      <div class="border-t border-slate-200 pt-3 space-y-1.5 text-xs">
+        <div class="flex justify-between text-slate-600">
+          <span>Total Qty Barang:</span>
+          <span class="font-bold text-slate-900" x-text="`${calculateTotalItemsCount(selectedInvoice)} Unit`"></span>
+        </div>
+        <div class="flex justify-between text-slate-600">
+          <span>Subtotal Per Hari:</span>
+          <span class="font-mono font-semibold" x-text="formatRupiah(calculateOrderDailySubtotal(selectedInvoice))"></span>
+        </div>
+        <div class="flex justify-between text-slate-600">
+          <span>Lama Sewa:</span>
+          <span class="font-semibold" x-text="`${selectedInvoice?.durationDays} Hari`"></span>
+        </div>
+        <div class="flex justify-between text-base font-black text-slate-900 pt-2 border-t border-slate-200">
+          <span>TOTAL BAYAR:</span>
+          <span class="font-mono text-blue-600" x-text="formatRupiah(selectedInvoice?.totalAmount)"></span>
+        </div>
+      </div>
+
+      <div class="text-[11px] text-slate-400 italic bg-amber-50 p-3 rounded-xl text-center border border-amber-100">
+        * Terima kasih telah mempercayakan peralatan event Anda kepada EK Event Equipment Rental.
+      </div>
+
+      <!-- Signature Area -->
+      <div class="grid grid-cols-2 gap-8 pt-6 mt-4 border-t border-slate-200 text-center text-xs">
+        <div>
+          <p class="text-slate-500 mb-14">Penerima / Penyewa,</p>
+          <p class="font-bold text-slate-900 border-b border-slate-400 inline-block pb-1 min-w-[150px]" x-text="selectedInvoice?.customerName || '............................'"></p>
+        </div>
+        <div>
+          <p class="text-slate-500 mb-14">Hormat Kami,</p>
+          <p class="font-bold text-slate-900 border-b border-slate-400 inline-block pb-1 min-w-[150px]">EK Event Equipment</p>
+        </div>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="flex justify-end space-x-3 no-print pt-2">
+        <button @click="selectedInvoice = null" class="px-4 py-2 text-xs font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-xl">
+          Tutup
+        </button>
+        <button @click="triggerPrint()" class="px-5 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-xl shadow-md flex items-center">
+          <i data-lucide="printer" class="w-4 h-4 mr-1.5"></i> Cetak / Save PDF
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- TOAST NOTIFICATION -->
+  <div x-show="toast.show" 
+       x-transition:enter="transition ease-out duration-300"
+       x-transition:enter-start="opacity-0 translate-y-2"
+       x-transition:enter-end="opacity-100 translate-y-0"
+       x-transition:leave="transition ease-in duration-200"
+       class="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl flex items-center space-x-3 border border-slate-800 text-xs">
+    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+    <span x-text="toast.message" class="font-medium"></span>
+  </div>
+
+  <script>
+    document.addEventListener('alpine:init', () => {
+      Alpine.data('rentalApp', () => ({
+        orders: [],
+        filterStatus: 'Semua',
+        searchQuery: '',
+        isModalOpen: false,
+        isEditMode: false,
+        editingId: null,
+        selectedInvoice: null,
+        toast: { show: false, message: '' },
+
+        // Form State
+        formData: {
+          customerName: '',
+          phone: '',
+          date: new Date().toISOString().split('T')[0],
+          durationDays: 1,
+          status: 'Menunggu',
+          notes: '',
+          items: [
+            { name: '', qty: 1, pricePerUnit: 0 }
+          ]
+        },
+
+        init() {
+          // Load stored orders or initialize default samples
+          const saved = localStorage.getItem('ek_rental_orders');
+          if (saved) {
+            try {
+              this.orders = JSON.parse(saved);
+            } catch (e) {
+              this.loadDefaultSamples();
+            }
+          } else {
+            this.loadDefaultSamples();
+          }
+
+          this.$nextTick(() => {
+            if (window.lucide) window.lucide.createIcons();
+          });
+        },
+
+        showToast(msg) {
+          this.toast.message = msg;
+          this.toast.show = true;
+          setTimeout(() => { this.toast.show = false; }, 3000);
+        },
+
+        loadDefaultSamples() {
+          this.orders = [
+            {
+              id: 'EK-1001',
+              customerName: 'Jaya Music Fest',
+              phone: '081299887766',
+              date: '2026-09-20',
+              durationDays: 2,
+              status: 'Disewa',
+              notes: 'Panggung utama Lapangan Siliwangi',
+              totalAmount: 3700000,
+              items: [
+                { name: 'Sound System 1000W', qty: 2, pricePerUnit: 750000 },
+                { name: 'Lighting Moving Head Beam', qty: 4, pricePerUnit: 200000 }
+              ]
+            },
+            {
+              id: 'EK-1002',
+              customerName: 'Siti Rahmawati (Pernikahan)',
+              phone: '085711223344',
+              date: '2026-09-25',
+              durationDays: 1,
+              status: 'Menunggu',
+              notes: 'Gedung Serbaguna',
+              totalAmount: 1800000,
+              items: [
+                { name: 'Tenda Sarnafil 3x3m', qty: 4, pricePerUnit: 300000 },
+                { name: 'Kursi Futura + Cover', qty: 40, pricePerUnit: 15000 }
+              ]
+            },
+            {
+              id: 'EK-1003',
+              customerName: 'PT Mandiri Sukses (Corporate Gathering)',
+              phone: '082144332211',
+              date: '2026-09-10',
+              durationDays: 1,
+              status: 'Selesai',
+              notes: 'Ballroom Hotel Central',
+              totalAmount: 2700000,
+              items: [
+                { name: 'LED Screen Video Wall P3.9', qty: 1, pricePerUnit: 1500000 },
+                { name: 'Microphone Wireless Shure', qty: 4, pricePerUnit: 100000 },
+                { name: 'Meja VIP Round', qty: 10, pricePerUnit: 80000 }
+              ]
+            }
+          ];
+          this.saveToStorage();
+        },
+
+        saveToStorage() {
+          localStorage.setItem('ek_rental_orders', JSON.stringify(this.orders));
+        },
+
+        // Computed Filtered Orders
+        get filteredOrders() {
+          return this.orders.filter(order => {
+            const matchesStatus = (this.filterStatus === 'Semua') || (order.status === this.filterStatus);
+            const query = this.searchQuery.toLowerCase();
+            const matchesSearch = !query || 
+              order.customerName.toLowerCase().includes(query) ||
+              order.id.toLowerCase().includes(query) ||
+              order.items.some(i => i.name.toLowerCase().includes(query));
+            
+            return matchesStatus && matchesSearch;
+          });
+        },
+
+        // Dashboard Metrics
+        get totalRevenue() {
+          return this.orders
+            .filter(o => o.status === 'Selesai' || o.status === 'Disewa')
+            .reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+        },
+
+        countByStatus(status) {
+          return this.orders.filter(o => o.status === status).length;
+        },
+
+        // Item Calculations
+        calculateTotalItemsCount(order) {
+          if (!order || !order.items) return 0;
+          return order.items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+        },
+
+        calculateOrderDailySubtotal(order) {
+          if (!order || !order.items) return 0;
+          return order.items.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.pricePerUnit || 0)), 0);
+        },
+
+        calculateModalTotalItems() {
+          return this.formData.items.reduce((sum, item) => sum + Number(item.qty || 0), 0);
+        },
+
+        calculateModalDailySubtotal() {
+          return this.formData.items.reduce((sum, item) => sum + (Number(item.qty || 0) * Number(item.pricePerUnit || 0)), 0);
+        },
+
+        calculateModalGrandTotal() {
+          const daily = this.calculateModalDailySubtotal();
+          const days = Number(this.formData.durationDays || 1);
+          return daily * days;
+        },
+
+        // Currency Formatting
+        formatRupiah(amount) {
+          const val = Number(amount) || 0;
+          return new Intl.NumberFormat('id-ID', {
+            style: 'currency',
+            currency: 'IDR',
+            maximumFractionDigits: 0
+          }).format(val);
+        },
+
+        formatDate(dateStr) {
+          if (!dateStr) return '-';
+          const options = { year: 'numeric', month: 'short', day: 'numeric' };
+          return new Date(dateStr).toLocaleDateString('id-ID', options);
+        },
+
+        // Dynamic Form Item Row Handlers
+        addItemRow() {
+          this.formData.items.push({ name: '', qty: 1, pricePerUnit: 0 });
+          this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+        },
+
+        removeItemRow(index) {
+          if (this.formData.items.length > 1) {
+            this.formData.items.splice(index, 1);
+          }
+        },
+
+        openModal() {
+          this.isEditMode = false;
+          this.editingId = null;
+          this.formData = {
+            customerName: '',
+            phone: '',
+            date: new Date().toISOString().split('T')[0],
+            durationDays: 1,
+            status: 'Menunggu',
+            notes: '',
+            items: [
+              { name: '', qty: 1, pricePerUnit: 0 }
+            ]
+          };
+          this.isModalOpen = true;
+          this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+        },
+
+        closeModal() {
+          this.isModalOpen = false;
+        },
+
+        editOrder(order) {
+          this.isEditMode = true;
+          this.editingId = order.id;
+          this.formData = JSON.parse(JSON.stringify({
+            customerName: order.customerName,
+            phone: order.phone || '',
+            date: order.date,
+            durationDays: order.durationDays,
+            status: order.status,
+            notes: order.notes || '',
+            items: order.items.map(i => ({ ...i }))
+          }));
+          this.isModalOpen = true;
+          this.$nextTick(() => { if (window.lucide) window.lucide.createIcons(); });
+        },
+
+        saveOrder() {
+          const grandTotal = this.calculateModalGrandTotal();
+          
+          if (this.isEditMode) {
+            const idx = this.orders.findIndex(o => o.id === this.editingId);
+            if (idx !== -1) {
+              this.orders[idx] = {
+                ...this.orders[idx],
+                ...this.formData,
+                totalAmount: grandTotal
+              };
+              this.showToast('Pesanan berhasil diperbarui!');
+            }
+          } else {
+            const newId = 'EK-' + Math.floor(1000 + Math.random() * 9000);
+            const newOrder = {
+              id: newId,
+              ...this.formData,
+              totalAmount: grandTotal
+            };
+            this.orders.unshift(newOrder);
+            this.showToast('Pesanan baru berhasil ditambahkan!');
+          }
+
+          this.saveToStorage();
+          this.closeModal();
+        },
+
+        confirmDelete(order) {
+          if (window.confirm(`Hapus pesanan #${order.id} atas nama ${order.customerName}?`)) {
+            this.orders = this.orders.filter(o => o.id !== order.id);
+            this.saveToStorage();
+            this.showToast('Pesanan telah dihapus.');
+          }
+        },
+
+        viewInvoice(order) {
+          this.selectedInvoice = order;
+          this.$nextTick(() => {
+            if (window.lucide) window.lucide.createIcons();
+          });
+        },
+
+        triggerPrint() {
+          this.$nextTick(() => {
+            window.print();
+          });
+        },
+
+        exportExcel() {
+          if (this.orders.length === 0) {
+            this.showToast('Tidak ada data untuk diekspor.');
+            return;
+          }
+
+          // Format rows for Excel
+          const exportData = this.orders.map(o => {
+            const barangList = o.items.map(i => `${i.name} (${i.qty} unit @ Rp ${i.pricePerUnit})`).join('; ');
+            return {
+              'ID Pesanan': o.id,
+              'Nama Pemesan': o.customerName,
+              'No Telepon': o.phone || '-',
+              'Tanggal Pesan': o.date,
+              'Durasi (Hari)': o.durationDays,
+              'Daftar Barang & Harga Unit': barangList,
+              'Total Items': this.calculateTotalItemsCount(o),
+              'Total Harga (Rp)': o.totalAmount,
+              'Status': o.status,
+              'Catatan / Lokasi': o.notes || '-'
+            };
+          });
+
+          const worksheet = XLSX.utils.json_to_sheet(exportData);
+          const workbook = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(workbook, worksheet, 'Pesanan Rental');
+
+          // Auto Column Width
+          const max_width = exportData.reduce((w, r) => Math.max(w, r['Nama Pemesan'].length), 15);
+          worksheet['!cols'] = [ { wch: 12 }, { wch: max_width }, { wch: 15 }, { wch: 15 }, { wch: 12 }, { wch: 40 }, { wch: 12 }, { wch: 18 }, { wch: 12 }, { wch: 25 } ];
+
+          XLSX.writeFile(workbook, `EK_Rental_Orders_${new Date().toISOString().split('T')[0]}.xlsx`);
+          this.showToast('Data berhasil diekspor ke Excel!');
+        },
+
+        importExcel(event) {
+          const file = event.target.files[0];
+          if (!file) return;
+
+          const reader = new FileReader();
+          reader.onload = (e) => {
+            try {
+              const data = new Uint8Array(e.target.result);
+              const workbook = XLSX.read(data, { type: 'array' });
+              const sheetName = workbook.SheetNames[0];
+              const worksheet = workbook.Sheets[sheetName];
+              const json = XLSX.utils.sheet_to_json(worksheet);
+
+              if (json.length === 0) {
+                this.showToast('File Excel kosong atau format tidak sesuai.');
+                return;
+              }
+
+              let importedCount = 0;
+              json.forEach(row => {
+                const customerName = row['Nama Pemesan'] || row['customerName'] || row['Nama'];
+                if (!customerName) return;
+
+                // Parse items if formatted string or create default single item
+                let items = [];
+                const rawBarang = row['Daftar Barang & Harga Unit'] || row['Barang'];
+                
+                if (rawBarang && typeof rawBarang === 'string') {
+                  // Format parsing: "Sound System (2 unit @ Rp 750000); Tenda (1 unit @ Rp 300000)"
+                  const parts = rawBarang.split(';');
+                  parts.forEach(p => {
+                    const match = p.match(/(.*?)\((\d+)\s*unit\s*@\s*Rp\s*(\d+)\)/i);
+                    if (match) {
+                      items.push({
+                        name: match[1].trim(),
+                        qty: Number(match[2]),
+                        pricePerUnit: Number(match[3])
+                      });
+                    } else {
+                      items.push({ name: p.trim(), qty: 1, pricePerUnit: Number(row['Harga Per Unit'] || 0) });
+                    }
+                  });
+                }
+
+                if (items.length === 0) {
+                  items.push({
+                    name: rawBarang || 'Peralatan Event',
+                    qty: Number(row['Total Items'] || row['Qty'] || 1),
+                    pricePerUnit: Number(row['Harga Satuan'] || 0)
+                  });
+                }
+
+                const newOrder = {
+                  id: row['ID Pesanan'] || 'EK-' + Math.floor(1000 + Math.random() * 9000),
+                  customerName: customerName,
+                  phone: row['No Telepon'] || row['Phone'] || '',
+                  date: row['Tanggal Pesan'] || new Date().toISOString().split('T')[0],
+                  durationDays: Number(row['Durasi (Hari)'] || row['Hari'] || 1),
+                  status: row['Status'] || 'Menunggu',
+                  notes: row['Catatan / Lokasi'] || '',
+                  items: items,
+                  totalAmount: Number(row['Total Harga (Rp)']) || (items.reduce((s, i) => s + (i.qty * i.pricePerUnit), 0) * Number(row['Durasi (Hari)'] || 1))
+                };
+
+                this.orders.unshift(newOrder);
+                importedCount++;
+              });
+
+              this.saveToStorage();
+              this.showToast(`Berhasil mengimpor ${importedCount} pesanan dari Excel!`);
+              event.target.value = ''; // Reset input
+            } catch (err) {
+              console.error(err);
+              this.showToast('Gagal membaca file Excel. Pastikan format valid.');
+            }
+          };
+          reader.readAsArrayBuffer(file);
+        }
+
+      }));
+    });
+  </script>
+</body>
+</html>
